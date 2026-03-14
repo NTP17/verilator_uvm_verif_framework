@@ -207,6 +207,6 @@ The C++ NFA engine (`lib/sva_engine.cpp`) evaluates assertions and collects cove
 ## Dependencies
 
 - [Verilator](https://verilator.org/) (tested with v5.046)
-- UVM (IEEE 1800.2-2020 compatible, with DPI support)
+- UVM (IEEE 1800.2-2020 compatible, with DPI support, tested with [Verilator's official test suite](https://github.com/verilator/verilator/tree/master/test_regress/t/uvm/))
 - Python 3 (for `svpp.py`)
 - GNU Make
