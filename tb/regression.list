@@ -1,0 +1,4 @@
+axi4lite_write_test
+axi4lite_read_test
+axi4lite_wr_rd_test
+axi4lite_random_test
