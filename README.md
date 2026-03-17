@@ -5,7 +5,7 @@ A reusable framework for running UVM testbenches on Verilator with native System
 ## Dependencies
 
 - [Verilator](https://verilator.org/) (tested with v5.046)
-- UVM (IEEE 1800.2-2020 compatible, with DPI support, tested with [Verilator's official test suite](https://github.com/verilator/verilator/tree/master/test_regress/t/uvm/))
+- UVM (IEEE 1800.2-2020 compatible, with DPI support, tested with [uvm-verilator by CHIPS Alliance](https://github.com/chipsalliance/uvm-verilator))
 - Python 3 (for `svpp.py`)
 - GNU Make
 
