@@ -6,7 +6,6 @@ A reusable framework for running UVM testbenches on Verilator with native System
 
 - [Verilator](https://verilator.org/) (tested with v5.046)
 - UVM (IEEE 1800.2-2020 compatible, with DPI support, tested with [uvm-verilator by CHIPS Alliance](https://github.com/chipsalliance/uvm-verilator))
-- Python 3 (for `svpp.py`)
 - GNU Make
 
 ## Typical Project Structure
@@ -20,9 +19,12 @@ A reusable framework for running UVM testbenches on Verilator with native System
 │   ├── sva_engine.cpp    #   Engine implementation
 │   ├── sva_dpi.cpp       #   DPI-C bridge (SV <-> C++)
 │   ├── sva_dpi_pkg.sv    #   SV package declaring all DPI-C imports
-│   └── sva_uvm_report.svh #  UVM error reporting bridge (include in tb_top)
-├── tools/                # Reusable preprocessor (copy to any project)
-│   └── svpp.py           #   Source-to-source transformer for SVA + covergroup
+│   ├── sva_uvm_report.svh #  UVM error reporting bridge (include in tb_top)
+│   └── svpp_vpi_drive.cpp #  VPI driver for svpp output-negedge workaround
+├── tools/                # Reusable tools (copy to any project)
+│   ├── svpp              #   Source-to-source transformer for SVA + covergroup (binary)
+│   ├── merger            #   Merges per-test SVA reports into a single report (binary)
+│   └── src/              #   Source code for the above tools
 ├── gen/                  # Auto-generated preprocessed files (disposable)
 ├── obj_dir/              # Verilator build output (disposable)
 ├── rtl/                  # RTL design files
@@ -46,7 +48,7 @@ make clean                  # Remove all generated files
 
 | Target    | Description |
 |-----------|-------------|
-| `compile` | Preprocess all `.sv` files through `svpp.py`, then compile with Verilator |
+| `compile` | Preprocess all `.sv` files through `svpp`, then compile with Verilator |
 | `run`     | Run a single simulation |
 | `all`     | Similar to `make compile && make run`. This is the default `make` behavior. |
 | `regress` | Run all tests in `REGRESS_LIST`, report pass/fail summary |
@@ -60,11 +62,11 @@ All options can be combined: `make run TEST=my_test COUNT=50 SEED=42 LOG=1 DUMP=
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TEST`   | *(set in Makefile)* | UVM test name (`+UVM_TESTNAME`) |
-| `COUNT`  | `1` | Transaction count per test (`+COUNT=N`) |
+| `COUNT`  | `1` | Transaction count per test (compile-time define) |
 | `SEED`   | `random` | Random seed; set to a number for reproducibility (`+verilator+seed+N`) |
 | `DUMP`   | `0` | Set `1` to enable VCD waveform dump (`dump.vcd`) |
 | `LOG`    | `0` | Set `1` to tee stdout+stderr into `<testname>.log` |
-| `COVER`  | `0` | Set `1` to run `verilator_coverage` annotation after simulation |
+| `COVER`  | `0` | Set `1` to generate SVA/coverage report (`sva_report.txt`) |
 | `REGRESS_LIST` | `tb/regression.list` | Path to regression test list file |
 
 ## Regression Examples
@@ -83,9 +85,9 @@ make regress REGRESS_LIST=tb/nightly.list COUNT=100 # Nightly regression
 - Each test is checked for `UVM_ERROR` / `UVM_FATAL` in the output to determine pass/fail
 - Summary is printed to terminal and written to `regress_report.txt`
 - The random seed used is displayed per-test for reproducibility
-- With `COVER=1`, per-test `.dat` files are merged and annotated at the end
+- With `COVER=1`, per-test SVA reports are merged into a single `sva_report.txt` with accumulated assertion counts and coverage bin hits
 
-## SVA Preprocessor (`svpp.py`)
+## SVA Preprocessor (`svpp`)
 
 The preprocessor transforms native SystemVerilog syntax into DPI-C calls that Verilator can compile.
 
@@ -122,7 +124,7 @@ covergroup my_cg @(posedge clk);
 endgroup
 ```
 
-For class-based covergroups (e.g. inside a `uvm_subscriber`), `svpp.py` generates init/sample functions instead of `initial`/`always` blocks. The `new()` and `.sample()` calls are automatically rewritten.
+For class-based covergroups (e.g. inside a `uvm_subscriber`), `svpp` generates init/sample functions instead of `initial`/`always` blocks. The `new()` and `.sample()` calls are automatically rewritten.
 
 ### Preprocessing Flow
 
@@ -181,22 +183,7 @@ The C++ NFA engine (`lib/sva_engine.cpp`) evaluates assertions and collects cove
    my_error_inject_test
    ```
 
-6. In your `tb_top.sv`, add the SVA/UVM bridge:
-   ```systemverilog
-   import sva_dpi_pkg::*;
-   `include "sva_uvm_report.svh"
-
-   initial begin
-       sva_register_uvm_scope();
-       run_test();
-   end
-
-   final begin
-       sva_final();
-   end
-   ```
-
-7. Run:
+6. Run:
    ```bash
    make regress                  # Run default regression list
    make all TEST=my_basic_test   # Run a single test
@@ -206,7 +193,6 @@ The C++ NFA engine (`lib/sva_engine.cpp`) evaluates assertions and collects cove
 
 | File | Content |
 |------|---------|
-| `sva_report.txt` | Assertion pass/fail/vacuous counts + coverage bin hit summary |
+| `sva_report.txt` | Assertion pass/fail/vacuous counts + coverage bin hit summary (when `COVER=1`; merged across tests during regression) |
 | `regress_report.txt` | Per-test pass/fail + regression summary |
 | `<testname>.log` | Full simulation output (when `LOG=1`) |
-| `coverage_annotated/` | Source-annotated coverage (when `COVER=1`) |

@@ -38,23 +38,23 @@ class axi4lite_monitor extends uvm_monitor;
             // Capture AW and W handshakes
             fork
                 begin : mon_aw
-                    do @(posedge vif.clk);
-                    while (!(vif.awvalid && vif.awready));
-                    aw_addr = vif.awaddr;
-                    aw_prot = vif.awprot;
+                    do @(vif.mon_cb);
+                    while (!(vif.mon_cb.awvalid && vif.mon_cb.awready));
+                    aw_addr = vif.mon_cb.awaddr;
+                    aw_prot = vif.mon_cb.awprot;
                 end
                 begin : mon_w
-                    do @(posedge vif.clk);
-                    while (!(vif.wvalid && vif.wready));
-                    w_data = vif.wdata;
-                    w_strb = vif.wstrb;
+                    do @(vif.mon_cb);
+                    while (!(vif.mon_cb.wvalid && vif.mon_cb.wready));
+                    w_data = vif.mon_cb.wdata;
+                    w_strb = vif.mon_cb.wstrb;
                 end
             join
 
             // Capture B handshake
-            do @(posedge vif.clk);
-            while (!(vif.bvalid && vif.bready));
-            b_resp = vif.bresp;
+            do @(vif.mon_cb);
+            while (!(vif.mon_cb.bvalid && vif.mon_cb.bready));
+            b_resp = vif.mon_cb.bresp;
 
             item = axi4lite_seq_item::type_id::create("mon_wr_item");
             item.txn_type = axi4lite_seq_item::WRITE;
@@ -74,19 +74,19 @@ class axi4lite_monitor extends uvm_monitor;
 
         forever begin
             // Capture AR handshake
-            do @(posedge vif.clk);
-            while (!(vif.arvalid && vif.arready));
+            do @(vif.mon_cb);
+            while (!(vif.mon_cb.arvalid && vif.mon_cb.arready));
 
             item = axi4lite_seq_item::type_id::create("mon_rd_item");
             item.txn_type = axi4lite_seq_item::READ;
-            item.addr     = vif.araddr;
-            item.prot     = vif.arprot;
+            item.addr     = vif.mon_cb.araddr;
+            item.prot     = vif.mon_cb.arprot;
 
             // Capture R handshake
-            do @(posedge vif.clk);
-            while (!(vif.rvalid && vif.rready));
-            item.rdata = vif.rdata;
-            item.resp  = vif.rresp;
+            do @(vif.mon_cb);
+            while (!(vif.mon_cb.rvalid && vif.mon_cb.rready));
+            item.rdata = vif.mon_cb.rdata;
+            item.resp  = vif.mon_cb.rresp;
 
             `uvm_info(get_type_name(), $sformatf("MON READ:  %s", item.convert2string()), UVM_HIGH)
             ap.write(item);

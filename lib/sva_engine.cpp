@@ -1222,10 +1222,16 @@ void Assertion::advance_tokens(
     std::vector<Token> next_tokens;
 
     for (auto& tok : tokens) {
+        // --- Delay handling ---
+        // ##N means "evaluate N cycles later".  When we decrement to 0
+        // the token is ready and must be evaluated THIS tick, not next.
         if (tok.delay_remaining > 0) {
             tok.delay_remaining--;
-            next_tokens.push_back(tok);
-            continue;
+            if (tok.delay_remaining > 0) {
+                next_tokens.push_back(tok);
+                continue;
+            }
+            // delay just hit 0 — fall through to evaluate NOW
         }
 
         auto& node = nfa.nodes[tok.node_id];
@@ -1275,6 +1281,21 @@ void Assertion::advance_tokens(
                             continue;
                         }
                         // Continue from target's successors
+                        for (auto& e2 : tgt.edges) {
+                            Token t2;
+                            t2.node_id = e2.target;
+                            t2.delay_remaining = e2.delay;
+                            t2.birth_cycle = tok.birth_cycle;
+                            t2.attempt_id = tok.attempt_id;
+                            next_tokens.push_back(t2);
+                        }
+                        continue;
+                    }
+                    // No condition, not accept: pass-through node
+                    // (e.g. from parse_bool_expr_as_nfa's extra accept node
+                    // that lost its accept status during sequence concat).
+                    // Traverse its edges immediately without burning a tick.
+                    if (!tgt.condition && !tgt.is_accept) {
                         for (auto& e2 : tgt.edges) {
                             Token t2;
                             t2.node_id = e2.target;
@@ -1376,6 +1397,19 @@ void Assertion::tick(
     }
 
     pass_count += passed_set.size();
+
+    // Clean up stale tokens: once an attempt passes via ANY branch,
+    // remove all remaining tokens for that attempt from cons_tokens.
+    // This prevents spurious failures when later delay-tokens expire
+    // for an attempt that already succeeded.
+    if (!passed_set.empty()) {
+        cons_tokens.erase(
+            std::remove_if(cons_tokens.begin(), cons_tokens.end(),
+                [&passed_set](const Token& t) {
+                    return passed_set.count(t.attempt_id) > 0;
+                }),
+            cons_tokens.end());
+    }
 
     if (kind == ASSERT || kind == ASSUME) {
         for (auto id : failed_set) {

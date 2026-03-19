@@ -2,12 +2,9 @@
 module tb_top;
 
     import uvm_pkg::*;
+    `include "uvm_macros.svh"
     import axi4lite_pkg::*;
-    import sva_dpi_pkg::*;
-    `include "axi4lite_test.sv"
-    `include "sva_uvm_report.svh"
 
-    // Clock and reset
     logic clk;
     logic rst_n;
 
@@ -56,7 +53,7 @@ module tb_top;
         .rresp   (axi_if.rresp)
     );
 
-    // SVA concurrent assertions (preprocessed by svpp.py)
+    // SVA concurrent assertions (preprocessed by svpp)
     axi4lite_sva sva_i (
         .clk     (clk),
         .rst_n   (rst_n),
@@ -76,17 +73,13 @@ module tb_top;
         .rresp   (axi_if.rresp)
     );
 
-    // Functional coverage is now collected via UVM subscriber (axi4lite_coverage)
-    // connected to the monitor's analysis port — no separate module needed.
-
     // Pass virtual interface to UVM config_db
     initial begin
         uvm_config_db#(virtual axi4lite_if)::set(null, "*", "vif", axi_if);
     end
 
-    // Register UVM scope for SVA error reporting, then run UVM test
+    // Run UVM test
     initial begin
-        sva_register_uvm_scope();
         run_test();
     end
 
@@ -98,15 +91,8 @@ module tb_top;
 
     // Optional: Waveform dump
     initial begin
-        if ($test$plusargs("dump")) begin
-            $dumpfile("dump.vcd");
-            $dumpvars(0, tb_top);
-        end
-    end
-
-    // SVA + Coverage engine report
-    final begin
-        sva_final();
+        $dumpfile("dump.vcd");
+        $dumpvars(0, tb_top);
     end
 
 endmodule

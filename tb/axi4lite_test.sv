@@ -77,7 +77,6 @@ class axi4lite_wr_rd_test extends axi4lite_base_test;
 
         phase.raise_objection(this);
         seq = axi4lite_wr_rd_seq::type_id::create("seq");
-        seq.num_txns = 10;
         seq.start(env.agent.sqr);
         #100;
         phase.drop_objection(this);
@@ -99,7 +98,6 @@ class axi4lite_random_test extends axi4lite_base_test;
 
         phase.raise_objection(this);
         seq = axi4lite_random_seq::type_id::create("seq");
-        seq.num_txns = 30;
         seq.start(env.agent.sqr);
         #100;
         phase.drop_objection(this);

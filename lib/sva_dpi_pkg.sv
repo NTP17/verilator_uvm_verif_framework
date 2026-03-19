@@ -105,4 +105,10 @@ package sva_dpi_pkg;
     // Save DPI scope for UVM error callback
     import "DPI-C" context function void sva_register_uvm_scope();
 
+    // ---------------------------------------------------------------
+    //  VPI Signal Driver (Verilator VIF workaround)
+    // ---------------------------------------------------------------
+    import "DPI-C" function void svpp_vpi_drive(
+        input string signal_path, input int value, input int width);
+
 endpackage : sva_dpi_pkg

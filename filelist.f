@@ -14,10 +14,10 @@
 // SVA / Coverage engine (DPI-C bridge)
 lib/sva_dpi_pkg.sv
 
-// VIP
+// VIP (interface & SVA module must be separate compilation units)
 vip/axi4lite_if.sv
-vip/axi4lite_pkg.sv
 vip/axi4lite_sva.sv
+vip/axi4lite_pkg.sv
 
 // RTL
 rtl/axi4lite_slave_regfile.sv
