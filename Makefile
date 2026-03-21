@@ -4,10 +4,10 @@
 
 # UVM version selection
 # UVM=0 disables UVM; any other value selects a bundled version from uvm/
-# Available: 1.1d, 1.2, 2017, 2020
+# Available: 1.1d, 2020
 UVM          ?= 0
 ifneq ($(UVM),0)
-# Resolve short names (2017 → 2017-1.1, 2020 → 2020-3.1)
+# Resolve short names (2020 → 2020-3.1)
 _UVM_VER     := $(or $(wildcard uvm/uvm-verilator-uvm-$(UVM)),$(firstword $(wildcard uvm/uvm-verilator-uvm-$(UVM)-*)))
 UVM_HOME      = $(_UVM_VER)
 UVM_PKG       = $(UVM_HOME)/src/uvm_pkg.sv
@@ -52,13 +52,17 @@ PP_DIR        = gen
 # Recursively flatten -f includes so nested file lists are resolved
 _flat_cmd = awk 'function proc(f, line,a){while((getline line<f)>0){if(line~/^-f[[:space:]]/){split(line,a);proc(a[2])}else print line}close(f)}BEGIN{proc("$(FILELIST)")}'
 
+# Framework-managed source (always included)
+LIB_SV       := lib/sva_dpi_pkg.sv
+LIB_PP       := $(PP_DIR)/$(notdir $(basename $(LIB_SV))).pp.sv
+
 # Extract all .sv source paths from filelist (skip comments, flags, blank lines)
 SV_SRCS      := $(shell $(_flat_cmd) | grep -E '\.sv$$' | grep -v '^//')
 # Preprocessed targets: gen/<basename>.pp.sv
-SV_PPS       := $(foreach s,$(SV_SRCS),$(PP_DIR)/$(notdir $(basename $(s))).pp.sv)
+SV_PPS       := $(LIB_PP) $(foreach s,$(SV_SRCS),$(PP_DIR)/$(notdir $(basename $(s))).pp.sv)
 # Auto-discover included .sv files from +incdir paths (preprocessed but not compiled)
-INC_DIRS     := $(filter-out $(PP_DIR),$(patsubst +incdir+%,%,$(shell $(_flat_cmd) | grep -oP '\+incdir\+\S+')))
-INC_SVS      := $(filter-out $(SV_SRCS),$(wildcard $(addsuffix /*.sv,$(INC_DIRS))))
+INC_DIRS     := $(filter-out $(PP_DIR) lib,$(patsubst +incdir+%,%,$(shell $(_flat_cmd) | grep -oP '\+incdir\+\S+')))
+INC_SVS      := $(filter-out $(SV_SRCS) $(LIB_SV),$(wildcard $(addsuffix /*.sv,$(INC_DIRS))))
 INC_PPS      := $(foreach s,$(INC_SVS),$(PP_DIR)/$(notdir $(basename $(s))).pp.sv)
 # Extract .v source paths — preprocessed to gen/ with original name so +incdir+gen
 # shadows the originals (tristate, etc. are rewritten for Verilator)
@@ -88,6 +92,7 @@ VFLAGS       += -j 0
 VFLAGS       += --vpi
 VFLAGS       += --assert
 VFLAGS       += -Wno-fatal
+VFLAGS       += +incdir+lib +incdir+$(PP_DIR)
 ifneq ($(UVM),0)
 VFLAGS       += -CFLAGS "-I$(UVM_DPI_DIR) -I$(CURDIR)/lib -DVERILATOR -std=c++17"
 VFLAGS       += +incdir+$(UVM_HOME)/src
@@ -217,6 +222,7 @@ define SVPP_RULE
 $(PP_DIR)/$(notdir $(basename $(1))).pp.sv: $(1) $(SVPP_BIN) | $(PP_DIR)
 	$$(SVPP) $(1) -o $$@
 endef
+$(eval $(call SVPP_RULE,$(LIB_SV)))
 $(foreach s,$(SV_SRCS),$(eval $(call SVPP_RULE,$(s))))
 $(foreach s,$(INC_SVS),$(eval $(call SVPP_RULE,$(s))))
 

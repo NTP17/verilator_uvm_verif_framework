@@ -1059,6 +1059,79 @@ def _fix_assign_to_always_comb(lines):
     return result
 
 
+def _fix_initial_nba(lines):
+    """Convert ``initial begin`` blocks to ``always begin`` when they contain
+    non-blocking assignments *and* event controls.
+
+    Verilator converts ``<=`` inside ``initial`` blocks to blocking ``=``
+    (INITIALDLY warning), which breaks NBA scheduling semantics.  Testbench
+    stimulus blocks that drive DUT inputs with ``<=`` and wait on clock
+    edges then update signals in the active region instead of the NBA
+    region, causing timing mismatches vs. commercial simulators.
+
+    ``always begin`` blocks handle ``<=`` correctly in Verilator.  This is
+    safe for testbench blocks because they end with ``$finish`` (preventing
+    infinite re-execution).
+
+    A block qualifies if it contains BOTH:
+      - ``$finish`` or ``$fatal`` (ensures the block is a one-shot testbench
+        block where ``always`` won't cause infinite re-execution)
+      - at least one non-blocking assignment (``<=``) OR a task call that may
+        contain NBA (any non-system identifier followed by ``(``)
+
+    This also covers blocks that call tasks containing NBA — Verilator
+    inlines task bodies into the calling initial context, so the ``<=``
+    inside those tasks also gets converted to ``=``.
+    """
+    # --- Pass 1: identify initial-begin block ranges and whether they qualify ---
+    blocks = []  # list of (start_line, end_line, qualifies)
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if re.match(r'^initial\s+begin\b', stripped):
+            start = i
+            depth = 1
+            has_finish = False
+            has_nba_or_task = False
+            j = i + 1
+            while j < len(lines) and depth > 0:
+                s = lines[j].strip()
+                for _ in re.finditer(r'\b(begin|fork)\b', s):
+                    depth += 1
+                for _ in re.finditer(r'\b(end|join|join_any|join_none)\b', s):
+                    depth -= 1
+                # Check for $finish or $fatal (safe to convert to always)
+                if re.search(r'\$(?:finish|fatal)\b', s):
+                    has_finish = True
+                # Check for NBA
+                if re.search(r'(?<![<>=!])\s*<=\s*(?!=)', s) and \
+                        not s.lstrip().startswith('//'):
+                    has_nba_or_task = True
+                # Check for task/function calls (non-system, non-keyword)
+                if re.search(r'\b(?!begin|end|if|else|for|while|repeat|fork'
+                             r'|join|return|case|do|wait|disable|forever\b)'
+                             r'[a-zA-Z_]\w*\s*\(', s) and \
+                        not s.lstrip().startswith('//'):
+                    has_nba_or_task = True
+                j += 1
+            blocks.append((start, j - 1, has_finish and has_nba_or_task))
+            i = j
+        else:
+            i += 1
+
+    if not blocks:
+        return lines
+
+    # --- Pass 2: replace qualifying 'initial begin' with 'always begin' ---
+    qualify_starts = {b[0] for b in blocks if b[2]}
+    result = []
+    for i, line in enumerate(lines):
+        if i in qualify_starts:
+            line = re.sub(r'^(\s*)initial(\s+begin\b)', r'\1always\2', line)
+        result.append(line)
+    return result
+
+
 def _fix_super_new(lines):
     """Move super.new() before the begin block in constructors.
 
@@ -1936,6 +2009,11 @@ def preprocess_file(input_path, output_path=None, clk_half_period=5):
                         f'__svpp_cg_{cg.name}_sample();', line)
 
         output_lines.append(line)
+
+    # Post-processing: convert 'initial begin' to 'always begin' in blocks
+    # that use non-blocking assignments and event controls (Verilator
+    # INITIALDLY workaround — NBA in initial blocks is treated as blocking)
+    output_lines = _fix_initial_nba(output_lines)
 
     # Post-processing: rewrite 'wait(vif.cb.signal)' to clock-edge polling
     # so Verilator respects clocking-block sampling semantics

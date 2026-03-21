@@ -5,13 +5,19 @@
 #include "sva_engine.h"
 #include "svdpi.h"
 
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
 using namespace sva;
 
-// DPI export from SV — calls `uvm_error in SystemVerilog context
-extern "C" void sva_uvm_error(const char* id, const char* msg);
+// DPI export from SV — calls `uvm_error in SystemVerilog context.
+// When UVM is active the SV-side DPI export (sva_uvm_report.svh) provides a
+// strong symbol that overrides this weak default.  For non-UVM testbenches the
+// fallback simply prints to stderr.
+extern "C" __attribute__((weak)) void sva_uvm_error(const char* id, const char* msg) {
+    fprintf(stderr, "[SVA ERROR] %s: %s\n", id, msg);
+}
 
 static svScope sva_tick_scope = nullptr;
 
